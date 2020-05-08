@@ -1,0 +1,13 @@
+1. Setup stack with EC2 instance(s), Redis, EFS, RDS Postgres.
+(https://aws.amazon.com/blogs/big-data/orchestrate-big-data-workflows-with-apache-airflow-genie-and-amazon-emr-part-2/)
+Or without EFS everything on a single EC2 instance:
+https://aws.amazon.com/blogs/machine-learning/build-end-to-end-machine-learning-workflows-with-amazon-sagemaker-and-apache-airflow/
+2. Install on EKS cluster (EC2 managed group) with Helm charts airflow/stable. Cannot use EKS with Fargate
+since EFS is not supported (https://github.com/aws/containers-roadmap/issues/826:
+[EKS/Fargate] [Volumes]: Add support for EFS volumes to EKS Fargate Containers ).
+3. Install on ECS cluster with Fargate and EFS since EFS support with ECS/Fargate is GA
+(To use EFS with ECS, customers can add one or more volume definitions to an ECS task definition. A volume definition
+includes an EFS file system ID, Access Point ID, and whether to enable IAM authorization or TLS encryption in transit.
+Container definitions within the task definition can specify the task definition volumes that should be mounted
+when that container is run. When a task that uses an EFS filesystem runs, ECS ensures that the EFS file system is
+mounted and available to the containers that need access to it.)

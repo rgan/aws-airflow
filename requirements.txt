@@ -1,0 +1,8 @@
+aws-cdk.core==1.33.0
+aws_cdk.aws_ec2==1.33.0
+aws_cdk.aws_eks==1.33.0
+aws_cdk_aws_ecs==1.33.0
+aws_cdk.aws_rds==1.33.0
+aws_cdk.aws_efs==1.33.0
+aws_cdk.aws_ecs_patterns==1.33.0
+aws_cdk.aws_elasticache==1.33.0

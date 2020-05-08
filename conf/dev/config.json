@@ -1,0 +1,9 @@
+{
+  "account_id" : "",
+  "mutli_az_db" : false,
+  "db_enable_performance_insights": false,
+  "num_cache_nodes": 1,
+  "cache_node_type": "cache.t2.micro",
+  "cache_az_mode": "single-az",
+  "dbadmin" : "airflow"
+}
