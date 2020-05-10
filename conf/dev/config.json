@@ -1,5 +1,6 @@
 {
   "account_id" : "",
+  "db_instance_type" : "t2.micro",
   "mutli_az_db" : false,
   "db_enable_performance_insights": false,
   "num_cache_nodes": 1,
