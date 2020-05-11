@@ -5,9 +5,8 @@ from aws_cdk.aws_ec2 import Vpc, Port, Protocol, SecurityGroup
 from aws_cdk.aws_logs import RetentionDays
 import aws_cdk.aws_ecs as ecs
 import aws_cdk.aws_ecs_patterns as ecs_patterns
-from aws_cdk.core import SecretValue
-
 from airflow_stack.rds_elasticache_stack import RdsElasticacheStack
+from airflow_stack.secret_value import SecretValueFix
 
 DB_PORT = 5432
 REDIS_PORT = 6379
@@ -24,10 +23,10 @@ class AirflowStack(core.Stack):
         self.db_port = DB_PORT
         self.vpc = Vpc(self, f"AirflowVPC-{deploy_env}", cidr="10.0.0.0/16", max_azs=2)
         self.cluster = ecs.Cluster(self, "AirflowCluster", vpc=vpc)
-        db_pwd_secret = SecretValue.secrets_manager(secret_id=config["db_pwd_secret_arn"])
+        db_passwd = SecretValueFix(config["db_pwd_secret_arn"], "postgres_pwd")
         environment = {"EXECUTOR": "Celery", "POSTGRES_HOST" : db_redis_stack.db_host,
                        "POSTGRES_PORT": str(self.db_port), "POSTGRES_DB": "airflow", "POSTGRES_USER": self.config["dbadmin"],
-                       "POSTGRES_PASSWORD": db_pwd_secret.to_string(), "REDIS_HOST": db_redis_stack.redis_host}
+                       "POSTGRES_PASSWORD": db_passwd.to_string(), "REDIS_HOST": db_redis_stack.redis_host}
         # web server - this initializes the db so must happen first
         self.web_service = self.airflow_web_service(environment)
         # https://github.com/aws/aws-cdk/issues/1654

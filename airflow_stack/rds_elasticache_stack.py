@@ -2,7 +2,7 @@ from aws_cdk import core, aws_ec2
 from aws_cdk.aws_ec2 import SecurityGroup, InstanceType
 from aws_cdk.aws_rds import DatabaseInstance, DatabaseInstanceEngine
 import aws_cdk.aws_elasticache as elasticache
-from aws_cdk.core import SecretValue
+from airflow_stack.secret_value import SecretValueFix
 
 
 class RdsElasticacheStack(core.Stack):
@@ -11,7 +11,7 @@ class RdsElasticacheStack(core.Stack):
         super().__init__(scope, id, **kwargs)
         self.config = config
         self.db_sg = SecurityGroup(self, f"AirflowPostgresSG-{deploy_env}", vpc=vpc)
-        db_pwd_secret = SecretValue.secrets_manager(secret_id=config["db_pwd_secret_arn"])
+        db_pwd_secret = SecretValueFix(config["db_pwd_secret_arn"], "postgres_pwd")
         self.postgres_db = DatabaseInstance(self, f"AirflowPostgresDb-{deploy_env}", engine=DatabaseInstanceEngine.POSTGRES,
                                        multi_az=self.config["mutli_az_db"],
                                        enable_performance_insights=self.config["db_enable_performance_insights"],
