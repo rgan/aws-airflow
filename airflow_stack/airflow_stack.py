@@ -32,7 +32,7 @@ class AirflowStack(core.Stack):
         # https://github.com/aws/aws-cdk/issues/1654
         self.web_service_sg().connections.allow_to_default_port(db_redis_stack.postgres_db, 'allow PG')
         redis_port_info = Port(protocol=Protocol.TCP, string_representation="allow to redis",
-                               from_port=db_redis_stack.redis.port, to_port=db_redis_stack.redis.port)
+                               from_port=REDIS_PORT, to_port=REDIS_PORT)
         redis_sg = SecurityGroup.from_security_group_id(self, id=f"Redis-SG-{deploy_env}",
                                                         security_group_id=db_redis_stack.redis.vpc_security_group_ids[0])
         self.web_service_sg().connections.allow_to(redis_sg, redis_port_info, 'allow Redis')
