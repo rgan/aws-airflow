@@ -1,7 +1,8 @@
 import os
 
 from aws_cdk import core, aws_ec2
-from aws_cdk.aws_ec2 import Vpc, Port, Protocol, SecurityGroup
+from aws_cdk.aws_ec2 import Vpc, Port, Protocol, SecurityGroup, BastionHostLinux, SubnetSelection, SubnetType, Peer, \
+    InstanceType, InstanceSize, InstanceClass, AmazonLinuxImage, AmazonLinuxGeneration
 from aws_cdk.aws_logs import RetentionDays
 import aws_cdk.aws_ecs as ecs
 import aws_cdk.aws_ecs_patterns as ecs_patterns
@@ -36,6 +37,7 @@ class AirflowStack(core.Stack):
         redis_sg = SecurityGroup.from_security_group_id(self, id=f"Redis-SG-{deploy_env}",
                                                         security_group_id=db_redis_stack.redis.vpc_security_group_ids[0])
         self.web_service_sg().connections.allow_to(redis_sg, redis_port_info, 'allow Redis')
+        self.setup_bastion_access(db_redis_stack, deploy_env, redis_sg, vpc)
         # scheduler
         # self.scheduler_service = self.create_scheduler_ecs_service(environment)
         # self.scheduler_sg().connections.allow_to_default_port(db_redis_stack.postgres_db, 'allow PG')
@@ -44,6 +46,20 @@ class AirflowStack(core.Stack):
         # self.worker_service = self.worker_service(environment)
         # self.worker_sg().connections.allow_to_default_port(db_redis_stack.postgres_db, 'allow PG')
         # self.worker_sg().connections.allow_to(redis_sg, redis_port_info, 'allow Redis')
+
+    def setup_bastion_access(self, db_redis_stack, deploy_env, redis_sg, vpc):
+        bastion = BastionHostLinux(self, f"AirflowBastion-{deploy_env}", vpc=vpc,
+                                   instance_type=InstanceType.of(InstanceClass.BURSTABLE2, InstanceSize.MICRO),
+                                   #machine_image=AmazonLinuxImage(AmazonLinuxGeneration.AMAZON_LINUX_2),
+                                   subnet_selection=SubnetSelection(subnet_type=SubnetType.PUBLIC))
+        bastion.instance.user_data.add_commands("yum check-update -y", "yum upgrade -y",
+                                                "yum install https://download.postgresql.org/pub/repos/yum/10/redhat/rhel-7-x86_64/postgresql10-10.12-1PGDG.rhel7.x86_64.rpm",
+                                                "yum install -y postgresql10")
+        ssh_port_info = Port(protocol=Protocol.TCP, string_representation="allow ssh",
+                             from_port=22, to_port=22)
+        bastion.allow_ssh_access_from(Peer.any_ipv4())
+        bastion.connections.security_groups[0].connections.allow_to_default_port(db_redis_stack.postgres_db, 'allow PG')
+        bastion.connections.security_groups[0].connections.allow_to(redis_sg, ssh_port_info, 'allow Redis')
 
     def web_service_sg(self):
         return self.web_service.service.connections.security_groups[0]
