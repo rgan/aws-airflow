@@ -50,7 +50,12 @@ class AirflowStack(core.Stack):
 
         self.worker_sg().connections.allow_to_default_port(db_redis_stack.postgres_db, 'allow PG')
         self.worker_sg().connections.allow_to(redis_sg, redis_port_info, 'allow Redis')
-        self.worker_sg().connections.allow_to(self.web_service_sg(), worker_port_info, 'web service to worker')
+        # When you start an airflow worker, airflow starts a tiny web server
+        # subprocess to serve the workers local log files to the airflow main
+        # web server, who then builds pages and sends them to users. This defines
+        # the port on which the logs are served. It needs to be unused, and open
+        # visible from the main web server to connect into the workers.
+        self.web_service_sg().connections.allow_to(self.worker_sg(), worker_port_info, 'web service to worker')
 
     def setup_bastion_access(self, db_redis_stack, deploy_env, redis_sg, vpc, redis_port_info):
         bastion = aws_ec2.Instance(self, f"AirflowBastion-{deploy_env}", vpc=vpc,
@@ -82,7 +87,7 @@ class AirflowStack(core.Stack):
         return self.worker_service.connections.security_groups[0]
 
     def airflow_web_service(self, environment):
-        return ecs_patterns.ApplicationLoadBalancedFargateService(self, f"AirflowWebserver-{self.deploy_env}",
+        service = ecs_patterns.ApplicationLoadBalancedFargateService(self, f"AirflowWebserver-{self.deploy_env}",
                                                                          cluster=self.cluster,  # Required
                                                                          cpu=512,  # Default is 256
                                                                          desired_count=1,  # Default is 1
@@ -97,6 +102,8 @@ class AirflowStack(core.Stack):
                                                                          memory_limit_mib=2048,  # Default is 512
                                                                          public_load_balancer=True
                                                                          )
+        service.target_group.configure_health_check(path="/health")
+        return service
 
     def worker_service(self, environment):
         worker_task_def = ecs.TaskDefinition(self, f"WorkerTaskDef-{self.deploy_env}", cpu="512", memory_mib="1024",
