@@ -8,7 +8,7 @@ class VpcStack(core.Stack):
         super().__init__(scope, id, **kwargs)
         self.config = config
         self.deploy_env = deploy_env
-        self.vpc = Vpc(self,  f"AirflowVPC-{deploy_env}", cidr="10.0.0.0/16", max_azs=2)
+        self.vpc = Vpc(self,  f"AirflowVPC-{deploy_env}", cidr="10.0.0.0/16", max_azs=config["max_vpc_azs"])
 
     def get_vpc(self):
         return self.vpc
