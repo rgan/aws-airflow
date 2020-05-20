@@ -1,5 +1,24 @@
+import shutil
+
 import boto3
 from invoke import task
+import os
+
+@task
+def prepare_docker_build(context, env):
+    build_dir = "build"
+    if not os.path.exists(build_dir): os.mkdir(build_dir)
+    for f in ["Dockerfile", f"conf/{env}/airflow.cfg"]:
+        shutil.copy(f, build_dir)
+
+@task
+def deploy_vpc_db(context, env):
+    context.run(f"cdk deploy vpc-{env} airflow-db-{env}")
+
+@task
+def deploy_airflow(context, env):
+    prepare_docker_build(context, env)
+    context.run(f"cdk deploy --require-approval never airflow-{env}")
 
 # cannot map volumes to Fargate task defs yet - so this is done via Boto3 since CDK does not
  # support it yet: https://github.com/aws/containers-roadmap/issues/825

@@ -1,6 +1,7 @@
 {
   "account_id" : "",
   "max_vpc_azs" : 2,
+  "ecr_repo_name" : "rg-repo",
   "db_instance_type" : "t2.micro",
   "mutli_az_db" : false,
   "db_enable_performance_insights": false,
@@ -8,5 +9,5 @@
   "cache_node_type": "cache.t2.micro",
   "cache_az_mode": "single-az",
   "dbadmin" : "airflow",
-  "db_pwd_secret_arn" : "arn:aws:secretsmanager:us-east-1:958237526296:secret:postgres_pwd-5jqG9r"
+  "db_pwd_secret_arn" : "<arn for db pwd in secret manager"
 }

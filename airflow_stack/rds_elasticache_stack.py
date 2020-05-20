@@ -67,8 +67,7 @@ class RdsElasticacheEfsStack(core.Stack):
                                    key_name="airflow")
         # bastion.user_data.add_commands("sudo yum check-update -y", "sudo yum upgrade -y",
         #                                         "sudo yum install postgresql-devel python-devel gcc",
-        #                                         "virtualenv env && source env/bin/activate && pip install pgcli",
-        #                                "pgcli")
+        #                                         "virtualenv env && source env/bin/activate && pip install pgcli==1.11.0")
         ssh_port_info = Port(protocol=Protocol.TCP, string_representation="allow ssh",
                              from_port=22, to_port=22)
         # As an alternative to providing a keyname we can use [EC2 Instance Connect]

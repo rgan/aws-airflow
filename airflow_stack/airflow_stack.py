@@ -2,6 +2,7 @@ import os
 
 from aws_cdk import core, aws_ec2
 from aws_cdk.aws_ec2 import Vpc, Port, Protocol, SecurityGroup
+from aws_cdk.aws_ecr_assets import DockerImageAsset
 from aws_cdk.aws_iam import PolicyStatement
 from aws_cdk.aws_logs import RetentionDays
 import aws_cdk.aws_ecs as ecs
@@ -13,8 +14,6 @@ from airflow_stack.rds_elasticache_stack import RdsElasticacheEfsStack
 DB_PORT = 5432
 AIRFLOW_WORKER_PORT=8793
 REDIS_PORT = 6379
-
-DOCKER_AIRFLOW = "puckel/docker-airflow"
 
 class AirflowStack(core.Stack):
 
@@ -28,7 +27,7 @@ class AirflowStack(core.Stack):
         # support it yet: https://github.com/aws/containers-roadmap/issues/825
         self.efs_file_system_id = db_redis_stack.efs_file_system_id
         self.cluster = ecs.Cluster(self, "AirflowCluster", vpc=vpc)
-        # https://github.com/aws/aws-cdk/issues/7272
+        # Bug with secrets: https://github.com/aws/aws-cdk/issues/7272
         # secret = ecs.Secret.from_secrets_manager(Secret.from_secret_attributes(self, "pwd",
         #                                                                        secret_arn=config["db_pwd_secret_arn"]),
         #                                                                        field="postgres_pwd")
@@ -38,6 +37,9 @@ class AirflowStack(core.Stack):
                        # have to pass like this due to issues above
                        "POSTGRES_PASSWORD": os.environ["POSTGRES_PASSWORD"],
                        "REDIS_HOST": db_redis_stack.redis_host}
+        image_asset = DockerImageAsset(self, "AirflowImage", directory="build",
+                                       repository_name=config["ecr_repo_name"])
+        self.image = ecs.ContainerImage.from_docker_image_asset(image_asset)
         # web server - this initializes the db so must happen first
         self.web_service = self.airflow_web_service(environment)
         # https://github.com/aws/aws-cdk/issues/1654
@@ -82,8 +84,7 @@ class AirflowStack(core.Stack):
                                                                          cpu=512,  # Default is 256
                                                                          desired_count=1,  # Default is 1
                                                                          task_image_options=ecs_patterns.ApplicationLoadBalancedTaskImageOptions(
-                                                                             image=ecs.ContainerImage.from_registry(
-                                                                                 DOCKER_AIRFLOW),
+                                                                             image=self.image,
                                                                               log_driver=ecs.LogDrivers.aws_logs(
                                                                                  stream_prefix=f"Worker",
                                                                                  log_retention=RetentionDays.ONE_DAY),
@@ -104,7 +105,7 @@ class AirflowStack(core.Stack):
         worker_task_def = ecs.TaskDefinition(self, family, cpu="512", memory_mib="1024",
                                              compatibility=ecs.Compatibility.FARGATE, family=family)
         worker_task_def.add_container(f"WorkerCont-{self.deploy_env}",
-                                      image=ecs.ContainerImage.from_registry(DOCKER_AIRFLOW),
+                                      image=self.image,
                                       command=["worker"], environment=environment,
                                       #secrets=self.secrets,
                                       logging=ecs.LogDrivers.aws_logs(stream_prefix=f"Worker",
@@ -120,7 +121,7 @@ class AirflowStack(core.Stack):
                                                 memory_mib="1024", family=task_family,
                                                 compatibility=ecs.Compatibility.FARGATE)
         scheduler_task_def.add_container(f"SchedulerCont-{self.deploy_env}",
-                                         image=ecs.ContainerImage.from_registry(DOCKER_AIRFLOW),
+                                         image=self.image,
                                          command=["scheduler"], environment=environment,
                                          #secrets=self.secrets,
                                          logging=ecs.LogDrivers.aws_logs(stream_prefix=f"Scheduler",
