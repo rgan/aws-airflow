@@ -21,7 +21,7 @@ def deploy_airflow(context, env):
     context.run(f"cdk deploy --require-approval never airflow-{env}")
 
 # cannot map volumes to Fargate task defs yet - so this is done via Boto3 since CDK does not
- # support it yet: https://github.com/aws/containers-roadmap/issues/825
+ # support it yet: https://github.com/aws/containers-roadmap/issues/825, fs-801fb903
 @task
 def setup_efs(context, deploy_env, file_system_id):
     client = boto3.client('ecs', region_name='us-east-1')
@@ -46,8 +46,9 @@ def update_service_task_def_with_efs_volume(client, file_system_id, service_name
             }
         },
     ]
+    task_def_arn = task_def["taskDefinitionArn"]
     add_volumes(task_def, volumes)
-    client.deregister_task_definition(task_def["taskDefinitionArn"])
+    client.deregister_task_definition(taskDefinition=task_def_arn)
     response = client.register_task_definition(**task_def)
     updated_task_def_arn = response["taskDefinition"]["taskDefinitionArn"]
     client.update_service(

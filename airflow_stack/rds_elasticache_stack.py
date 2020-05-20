@@ -1,7 +1,7 @@
 from aws_cdk import core, aws_ec2, aws_efs
 from aws_cdk.aws_ec2 import SecurityGroup, InstanceType, InstanceClass, InstanceSize, AmazonLinuxGeneration, \
     AmazonLinuxEdition, AmazonLinuxStorage, SubnetType, SubnetSelection, MachineImage, Port, Protocol
-from aws_cdk.aws_efs import EfsPerformanceMode, EfsThroughputMode
+from aws_cdk.aws_efs import PerformanceMode, ThroughputMode
 from aws_cdk.aws_rds import DatabaseInstance, DatabaseInstanceEngine
 import aws_cdk.aws_elasticache as elasticache
 from airflow_stack.secret_value import SecretValueFix
@@ -38,9 +38,9 @@ class RdsElasticacheEfsStack(core.Stack):
         self.redis.add_depends_on(redis_subnet_group)
         redis_port_info = Port(protocol=Protocol.TCP, string_representation="allow to redis",
                                from_port=REDIS_PORT, to_port=REDIS_PORT)
-        self.efs_file_system = aws_efs.EfsFileSystem(self, f'AirflowEFS-{deploy_env}', vpc=vpc, encrypted=False,
-                                performance_mode=EfsPerformanceMode.GENERAL_PURPOSE,
-                                throughput_mode=EfsThroughputMode.BURSTING)
+        self.efs_file_system = aws_efs.FileSystem(self, f'AirflowEFS-{deploy_env}', vpc=vpc, encrypted=False,
+                                performance_mode=PerformanceMode.GENERAL_PURPOSE,
+                                throughput_mode=ThroughputMode.BURSTING)
         bastion = self.setup_bastion_access(self.postgres_db, deploy_env, self.redis_sg, vpc, redis_port_info)
         self.setup_efs_volume(bastion, self.efs_file_system)
 
