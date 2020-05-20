@@ -13,7 +13,7 @@ def prepare_docker_build(context, env):
 
 @task
 def deploy_vpc_db(context, env):
-    context.run(f"cdk deploy vpc-{env} airflow-db-{env}")
+    context.run(f"cdk deploy --require-approval never vpc-{env} airflow-db-{env}")
 
 @task
 def deploy_airflow(context, env):
