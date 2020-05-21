@@ -9,5 +9,6 @@
   "cache_node_type": "cache.t2.micro",
   "cache_az_mode": "single-az",
   "dbadmin" : "airflow",
+  "num_airflow_workers": 1,
   "db_pwd_secret_arn" : "<arn for db pwd in secret manager"
 }

@@ -114,7 +114,8 @@ class AirflowStack(core.Stack):
         worker_task_def.add_to_execution_role_policy(PolicyStatement(resources=[self.config["db_pwd_secret_arn"]],
                             actions=["secretsmanager:GetSecretValue"]))
         return ecs.FargateService(self, f"AirflowWorker-{self.deploy_env}", task_definition=worker_task_def,
-                                  cluster=self.cluster, desired_count=1, platform_version=ecs.FargatePlatformVersion.VERSION1_4)
+                                  cluster=self.cluster, desired_count=self.config["num_airflow_workers"],
+                                  platform_version=ecs.FargatePlatformVersion.VERSION1_4)
 
     def create_scheduler_ecs_service(self, environment) -> ecs.FargateService:
         task_family = f"SchedulerTaskDef-{self.deploy_env}"
