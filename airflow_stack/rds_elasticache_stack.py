@@ -4,7 +4,8 @@ from aws_cdk.aws_ec2 import SecurityGroup, InstanceType, InstanceClass, Instance
 from aws_cdk.aws_efs import PerformanceMode, ThroughputMode
 from aws_cdk.aws_rds import DatabaseInstance, DatabaseInstanceEngine
 import aws_cdk.aws_elasticache as elasticache
-from airflow_stack.secret_value import SecretValueFix
+from aws_cdk.core import SecretValue
+
 REDIS_PORT = 6379
 
 class RdsElasticacheEfsStack(core.Stack):
@@ -13,7 +14,7 @@ class RdsElasticacheEfsStack(core.Stack):
         super().__init__(scope, id, **kwargs)
         self.config = config
         self.db_sg = SecurityGroup(self, f"AirflowPostgresSG-{deploy_env}", vpc=vpc)
-        db_pwd_secret = SecretValueFix(config["db_pwd_secret_arn"], "postgres_pwd")
+        db_pwd_secret = SecretValue.ssm_secure("postgres_pwd", "1")
         self.postgres_db = DatabaseInstance(self, f"AirflowPostgresDb-{deploy_env}", engine=DatabaseInstanceEngine.POSTGRES,
                                        multi_az=self.config["mutli_az_db"],
                                        enable_performance_insights=self.config["db_enable_performance_insights"],
@@ -41,12 +42,12 @@ class RdsElasticacheEfsStack(core.Stack):
         self.efs_file_system = aws_efs.FileSystem(self, f'AirflowEFS-{deploy_env}', vpc=vpc, encrypted=False,
                                 performance_mode=PerformanceMode.GENERAL_PURPOSE,
                                 throughput_mode=ThroughputMode.BURSTING)
-        bastion = self.setup_bastion_access(self.postgres_db, deploy_env, self.redis_sg, vpc, redis_port_info)
-        self.setup_efs_volume(bastion, self.efs_file_system)
+        self.bastion = self.setup_bastion_access(self.postgres_db, deploy_env, self.redis_sg, vpc, redis_port_info)
+        self.setup_efs_volume(self.efs_file_system)
 
-    def setup_efs_volume(self, bastion, efs_file_system):
-        efs_file_system.connections.allow_default_port_from(bastion)
-        bastion.add_user_data("yum check-update -y",
+    def setup_efs_volume(self, efs_file_system):
+        efs_file_system.connections.allow_default_port_from(self.bastion)
+        self.bastion.add_user_data("yum check-update -y",
                               "yum upgrade -y",
                               "yum install -y amazon-efs-utils",
                               "yum install -y nfs-utils",
@@ -58,14 +59,14 @@ class RdsElasticacheEfsStack(core.Stack):
                               "mount -a -t efs,nfs4 defaults")
 
     def setup_bastion_access(self, postgres_db, deploy_env, redis_sg, vpc, redis_port_info):
-        bastion = aws_ec2.Instance(self, f"AirflowBastion-{deploy_env}", vpc=vpc,
+        self.bastion = aws_ec2.Instance(self, f"AirflowBastion-{deploy_env}", vpc=vpc,
                                    instance_type=InstanceType.of(InstanceClass.BURSTABLE2, InstanceSize.MICRO),
                                    machine_image=MachineImage.latest_amazon_linux(generation=AmazonLinuxGeneration.AMAZON_LINUX,
                                                                                 edition=AmazonLinuxEdition.STANDARD,
                                                                                 storage=AmazonLinuxStorage.GENERAL_PURPOSE),
                                    vpc_subnets=SubnetSelection(subnet_type=SubnetType.PUBLIC),
                                    key_name="airflow")
-        # bastion.user_data.add_commands("sudo yum check-update -y", "sudo yum upgrade -y",
+        # self.bastion.user_data.add_commands("sudo yum check-update -y", "sudo yum upgrade -y",
         #                                         "sudo yum install postgresql-devel python-devel gcc",
         #                                         "virtualenv env && source env/bin/activate && pip install pgcli==1.11.0")
         ssh_port_info = Port(protocol=Protocol.TCP, string_representation="allow ssh",
@@ -73,10 +74,10 @@ class RdsElasticacheEfsStack(core.Stack):
         # As an alternative to providing a keyname we can use [EC2 Instance Connect]
         # https://aws.amazon.com/blogs/infrastructure-and-automation/securing-your-bastion-hosts-with-amazon-ec2-instance-connect/
         # with the command `aws ec2-instance-connect send-ssh-public-key` to provide your SSH public key.
-        bastion.connections.allow_from_any_ipv4(ssh_port_info)
-        bastion.connections.security_groups[0].connections.allow_to_default_port(postgres_db, 'allow PG')
-        bastion.connections.security_groups[0].connections.allow_to(redis_sg, redis_port_info, 'allow Redis')
-        return bastion
+        self.bastion.connections.allow_from_any_ipv4(ssh_port_info)
+        self.bastion.connections.security_groups[0].connections.allow_to_default_port(postgres_db, 'allow PG')
+        self.bastion.connections.security_groups[0].connections.allow_to(redis_sg, redis_port_info, 'allow Redis')
+        return self.bastion
 
     @property
     def redis_host(self):

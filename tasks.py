@@ -8,7 +8,7 @@ import os
 def prepare_docker_build(context, env):
     build_dir = "build"
     if not os.path.exists(build_dir): os.mkdir(build_dir)
-    for f in ["Dockerfile", f"conf/{env}/airflow.cfg"]:
+    for f in ["Dockerfile", f"conf/{env}/airflow.cfg", "entrypoint.sh"]:
         shutil.copy(f, build_dir)
 
 @task
@@ -25,15 +25,18 @@ def deploy_airflow(context, env):
 @task
 def setup_efs(context, deploy_env, file_system_id):
     client = boto3.client('ecs', region_name='us-east-1')
-    service_name = f"AirflowWebserver-{deploy_env}"
-    task_name = f"AirflowWebTaskDef-{deploy_env}"
-    update_service_task_def_with_efs_volume(client, file_system_id, service_name, task_name, '/mnt/efs')
+    services_and_tasks = [
+        (f"AirflowWebserver-{deploy_env}",  f"AirflowWebTaskDef-{deploy_env}")
+        #,("airflow-dev-AirflowSchdevService48A4CA55-F54QLSOQC8YP", "SchedulerTaskDef-dev"),
+                          #("airflow-dev-AirflowWorkerdevService760318E7-BWKRDEVWOLW7", "WorkerTaskDef-dev")
+    ]
+    for service_name, task_name in services_and_tasks:
+        update_service_task_def_with_efs_volume(client, file_system_id, service_name, task_name, '/mnt/efs')
 
 
 def update_service_task_def_with_efs_volume(client, file_system_id, service_name, task_name, root):
-    response = client.describe_task_definition(
-        taskDefinition=task_name,
-    )
+    print(task_name)
+    response = client.describe_task_definition(taskDefinition=task_name)
     task_def = response["taskDefinition"]
     print(task_def)
     volumes = [
