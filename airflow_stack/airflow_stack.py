@@ -13,6 +13,27 @@ DB_PORT = 5432
 AIRFLOW_WORKER_PORT=8793
 REDIS_PORT = 6379
 
+def get_cluster_name(deploy_env):
+    return f"AirflowCluster-{deploy_env}"
+
+def get_webserver_service_name(deploy_env):
+    return f"AirflowWebserver-{deploy_env}"
+
+def get_webserver_taskdef_family_name(deploy_env):
+    return f"AirflowWebTaskDef-{deploy_env}"
+
+def get_scheduler_service_name(deploy_env):
+    return f"AirflowSchedulerSvc-{deploy_env}"
+
+def get_scheduler_taskdef_family_name(deploy_env):
+    return f"AirflowSchedulerTaskDef-{deploy_env}"
+
+def get_worker_service_name(deploy_env):
+    return f"AirflowWorkerSvc-{deploy_env}"
+
+def get_worker_taskdef_family_name(deploy_env):
+    return f"AirflowWorkerTaskDef-{deploy_env}"
+
 class AirflowStack(core.Stack):
 
     def __init__(self, scope: core.Construct, id: str, deploy_env: str, vpc:aws_ec2.Vpc, db_redis_stack: RdsElasticacheEfsStack,
@@ -24,7 +45,8 @@ class AirflowStack(core.Stack):
         # cannot map volumes to Fargate task defs yet - so this is done via Boto3 since CDK does not
         # support it yet: https://github.com/aws/containers-roadmap/issues/825
         #self.efs_file_system_id = db_redis_stack.efs_file_system_id
-        self.cluster = ecs.Cluster(self, "AirflowCluster", vpc=vpc)
+        cluster_name = get_cluster_name(deploy_env)
+        self.cluster = ecs.Cluster(self, cluster_name, cluster_name=cluster_name, vpc=vpc)
         pwd_secret = ecs.Secret.from_ssm_parameter(StringParameter.from_secure_string_parameter_attributes(self, f"dbpwd-{deploy_env}",
                                                                                  version=1, parameter_name="postgres_pwd"))
         self.secrets = {"POSTGRES_PASSWORD": pwd_secret}
@@ -76,8 +98,8 @@ class AirflowStack(core.Stack):
         return self.worker_service.connections.security_groups[0]
 
     def airflow_web_service(self, environment):
-        service_name = f"AirflowWebserver-{self.deploy_env}"
-        family =  f"AirflowWebTaskDef-{self.deploy_env}"
+        service_name = get_webserver_service_name(self.deploy_env)
+        family =  get_webserver_taskdef_family_name(self.deploy_env)
         task_def = ecs.FargateTaskDefinition(self, family, cpu=512, memory_limit_mib=1024, family=family)
         task_def.add_container(f"WebWorker-{self.deploy_env}", image=self.image, environment=environment,
                                secrets=self.secrets, logging=ecs.LogDrivers.aws_logs(stream_prefix=f"Worker",
@@ -101,8 +123,8 @@ class AirflowStack(core.Stack):
         return service
 
     def worker_service(self, environment):
-        family = f"WorkerTaskDef-{self.deploy_env}"
-        service_name = f"AirflowWorkerSvc-{self.deploy_env}"
+        family = get_worker_taskdef_family_name(self.deploy_env)
+        service_name =get_worker_service_name(self.deploy_env)
         worker_task_def = ecs.TaskDefinition(self, family, cpu="512", memory_mib="1024",
                                              compatibility=ecs.Compatibility.FARGATE, family=family,
                                              network_mode=ecs.NetworkMode.AWS_VPC)
@@ -121,8 +143,8 @@ class AirflowStack(core.Stack):
                                   platform_version=ecs.FargatePlatformVersion.VERSION1_4)
 
     def create_scheduler_ecs_service(self, environment) -> ecs.FargateService:
-        task_family = f"SchedulerTaskDef-{self.deploy_env}"
-        service_name = f"AirflowSchedulerSvc-{self.deploy_env}"
+        task_family =get_scheduler_taskdef_family_name(self.deploy_env)
+        service_name = get_scheduler_service_name(self.deploy_env)
         scheduler_task_def = ecs.TaskDefinition(self, f"SchedulerTaskDef-{self.deploy_env}", cpu="512",
                                                 memory_mib="1024", family=task_family,
                                                 compatibility=ecs.Compatibility.FARGATE,
@@ -137,6 +159,6 @@ class AirflowStack(core.Stack):
                                                                                               host_port=22,
                                                                                               protocol=Protocol.TCP))
         # we want only 1 instance of the scheduler so when new versions are deployed max_healthy_percent=100
-        return ecs.FargateService(self, f"AirflowSch-{self.deploy_env}", task_definition=scheduler_task_def,
+        return ecs.FargateService(self, service_name, service_name=service_name, task_definition=scheduler_task_def,
                            cluster=self.cluster, desired_count=1, platform_version=ecs.FargatePlatformVersion.VERSION1_4,
                                   max_healthy_percent=100)
