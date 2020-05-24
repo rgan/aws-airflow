@@ -8,7 +8,7 @@ import os
 def prepare_docker_build(context, env):
     build_dir = "build"
     if not os.path.exists(build_dir): os.mkdir(build_dir)
-    for f in ["Dockerfile", f"conf/{env}/airflow.cfg", "entrypoint.sh"]:
+    for f in ["Dockerfile", f"conf/{env}/airflow.cfg"]:
         shutil.copy(f, build_dir)
 
 @task
@@ -21,14 +21,14 @@ def deploy_airflow(context, env):
     context.run(f"cdk deploy --require-approval never airflow-{env}")
 
 # cannot map volumes to Fargate task defs yet - so this is done via Boto3 since CDK does not
- # support it yet: https://github.com/aws/containers-roadmap/issues/825, fs-801fb903
+ # support it yet: https://github.com/aws/containers-roadmap/issues/825
 @task
 def setup_efs(context, deploy_env, file_system_id):
     client = boto3.client('ecs', region_name='us-east-1')
     services_and_tasks = [
-        (f"AirflowWebserver-{deploy_env}",  f"AirflowWebTaskDef-{deploy_env}")
-        #,("airflow-dev-AirflowSchdevService48A4CA55-F54QLSOQC8YP", "SchedulerTaskDef-dev"),
-                          #("airflow-dev-AirflowWorkerdevService760318E7-BWKRDEVWOLW7", "WorkerTaskDef-dev")
+        (f"AirflowWebserver-{deploy_env}",  f"AirflowWebTaskDef-{deploy_env}"),
+        (f"AirflowSchedulerSvc-{deploy_env}", f"SchedulerTaskDef-{deploy_env}"),
+        (f"AirflowWorkerSvc-{deploy_env}", f"WorkerTaskDef-{deploy_env}")
     ]
     for service_name, task_name in services_and_tasks:
         update_service_task_def_with_efs_volume(client, file_system_id, service_name, task_name, '/mnt/efs')
@@ -44,13 +44,13 @@ def update_service_task_def_with_efs_volume(client, file_system_id, service_name
             'name': "efsvolume",
             'efsVolumeConfiguration': {
                 'fileSystemId': file_system_id,
-                'rootDirectory': root,
                 'transitEncryption': 'DISABLED'
             }
         },
     ]
+    mount_points = [ {"sourceVolume": "efsvolume", "containerPath": "/mnt/efs"}]
     task_def_arn = task_def["taskDefinitionArn"]
-    add_volumes(task_def, volumes)
+    add_volumes(task_def, volumes, mount_points)
     client.deregister_task_definition(taskDefinition=task_def_arn)
     response = client.register_task_definition(**task_def)
     updated_task_def_arn = response["taskDefinition"]["taskDefinitionArn"]
@@ -60,7 +60,7 @@ def update_service_task_def_with_efs_volume(client, file_system_id, service_name
     )
 
 
-def add_volumes(task_def, volumes):
+def add_volumes(task_def, volumes, mount_points):
     task_def["volumes"] = volumes
     del task_def["taskDefinitionArn"]
     del task_def["revision"]
@@ -69,4 +69,5 @@ def add_volumes(task_def, volumes):
     compatibilities = task_def["compatibilities"]
     del task_def["compatibilities"]
     task_def["requiresCompatibilities"] = compatibilities
+    task_def["containerDefinitions"][0]["mountPoints"] = mount_points
 

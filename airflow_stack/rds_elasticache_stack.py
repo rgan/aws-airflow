@@ -39,19 +39,20 @@ class RdsElasticacheEfsStack(core.Stack):
         self.redis.add_depends_on(redis_subnet_group)
         redis_port_info = Port(protocol=Protocol.TCP, string_representation="allow to redis",
                                from_port=REDIS_PORT, to_port=REDIS_PORT)
-        self.efs_file_system = aws_efs.FileSystem(self, f'AirflowEFS-{deploy_env}', vpc=vpc, encrypted=False,
-                                performance_mode=PerformanceMode.GENERAL_PURPOSE,
-                                throughput_mode=ThroughputMode.BURSTING)
+        file_system_name = f'AirflowEFS-{deploy_env}'
+        self.efs_file_system = aws_efs.FileSystem(self, file_system_name, file_system_name=file_system_name,
+                                                  vpc=vpc, encrypted=False, performance_mode=PerformanceMode.GENERAL_PURPOSE,
+                                                  throughput_mode=ThroughputMode.BURSTING)
         self.bastion = self.setup_bastion_access(self.postgres_db, deploy_env, self.redis_sg, vpc, redis_port_info)
-        self.setup_efs_volume(self.efs_file_system)
+        self.setup_efs_volume()
 
-    def setup_efs_volume(self, efs_file_system):
-        efs_file_system.connections.allow_default_port_from(self.bastion)
+    def setup_efs_volume(self):
+        self.efs_file_system.connections.allow_default_port_from(self.bastion)
         self.bastion.add_user_data("yum check-update -y",
                               "yum upgrade -y",
                               "yum install -y amazon-efs-utils",
                               "yum install -y nfs-utils",
-                              "file_system_id_1=" + efs_file_system.file_system_id,
+                              "file_system_id_1=" + self.efs_file_system.file_system_id,
                               "efs_mount_point_1="+self.mount_point,
                               "mkdir -p \"${efs_mount_point_1}\"",
                               "test -f \"/sbin/mount.efs\" && echo \"${file_system_id_1}:/ ${efs_mount_point_1} efs defaults,_netdev\" >> /etc/fstab || " +
