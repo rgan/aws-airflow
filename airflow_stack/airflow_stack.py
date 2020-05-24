@@ -108,16 +108,18 @@ class AirflowStack(core.Stack):
                                                                      protocol=Protocol.TCP))
         task_def.default_container.add_port_mappings(ecs.PortMapping(container_port=22, host_port=22,
                                                                      protocol=Protocol.TCP))
+        # we want only 1 instance of the web server so when new versions are deployed max_healthy_percent=100
+        # you have to manually stop the current version and then it should start a new version - done by deploy task
         service = ecs_patterns.ApplicationLoadBalancedFargateService(self, service_name,
                                                                          cluster=self.cluster,  # Required
                                                                          service_name=service_name,
-                                                                         assign_public_ip=True,
                                                                          platform_version=ecs.FargatePlatformVersion.VERSION1_4,
                                                                          cpu=512,  # Default is 256
                                                                          desired_count=1,  # Default is 1
                                                                          task_definition=task_def,
                                                                          memory_limit_mib=2048,  # Default is 512
-                                                                         public_load_balancer=True
+                                                                         public_load_balancer=True,
+                                                                         max_healthy_percent=100
                                                                          )
         service.target_group.configure_health_check(path="/health")
         return service
@@ -137,10 +139,12 @@ class AirflowStack(core.Stack):
         worker_task_def.default_container.add_port_mappings(ecs.PortMapping(container_port=22,
                                                                                               host_port=22,
                                                                                               protocol=Protocol.TCP))
+        # we want only 1 instance of the worker so when new versions are deployed max_healthy_percent=100
+        # you have to manually stop the current version and then it should start a new version - done by deploy task
         return ecs.FargateService(self, f"AirflowWorker-{self.deploy_env}", service_name=service_name,
                                   task_definition=worker_task_def,
                                   cluster=self.cluster, desired_count=self.config["num_airflow_workers"],
-                                  platform_version=ecs.FargatePlatformVersion.VERSION1_4)
+                                  platform_version=ecs.FargatePlatformVersion.VERSION1_4, max_healthy_percent=100)
 
     def create_scheduler_ecs_service(self, environment) -> ecs.FargateService:
         task_family =get_scheduler_taskdef_family_name(self.deploy_env)
@@ -159,6 +163,7 @@ class AirflowStack(core.Stack):
                                                                                               host_port=22,
                                                                                               protocol=Protocol.TCP))
         # we want only 1 instance of the scheduler so when new versions are deployed max_healthy_percent=100
+        # you have to manually stop the current version and then it should start a new version - done by deploy task
         return ecs.FargateService(self, service_name, service_name=service_name, task_definition=scheduler_task_def,
                            cluster=self.cluster, desired_count=1, platform_version=ecs.FargatePlatformVersion.VERSION1_4,
                                   max_healthy_percent=100)

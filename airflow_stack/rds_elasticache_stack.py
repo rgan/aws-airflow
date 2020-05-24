@@ -7,6 +7,7 @@ import aws_cdk.aws_elasticache as elasticache
 from aws_cdk.core import SecretValue
 
 REDIS_PORT = 6379
+MOUNT_POINT = "/mnt/efs"
 
 class RdsElasticacheEfsStack(core.Stack):
 
@@ -102,4 +103,4 @@ class RdsElasticacheEfsStack(core.Stack):
 
     @property
     def mount_point(self):
-        return "/mnt/efs"
+        return MOUNT_POINT
