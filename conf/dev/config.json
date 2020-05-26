@@ -1,7 +1,7 @@
 {
   "account_id" : "",
   "max_vpc_azs" : 2,
-  "ecr_repo_name" : "rg-repo",
+  "ecr_repo_name" : "test-repo",
   "db_instance_type" : "t2.micro",
   "mutli_az_db" : false,
   "db_enable_performance_insights": false,
@@ -9,6 +9,8 @@
   "cache_node_type": "cache.t2.micro",
   "cache_az_mode": "single-az",
   "dbadmin" : "airflow",
+  "cpu": "512",
+  "memory":  "1024",
   "num_airflow_workers": 1,
   "celery_broker_visibility_timeout": 3600
 }

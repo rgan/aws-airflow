@@ -102,11 +102,9 @@ class AirflowStack(core.Stack):
         family =  get_webserver_taskdef_family_name(self.deploy_env)
         task_def = ecs.FargateTaskDefinition(self, family, cpu=512, memory_limit_mib=1024, family=family)
         task_def.add_container(f"WebWorker-{self.deploy_env}", image=self.image, environment=environment,
-                               secrets=self.secrets, logging=ecs.LogDrivers.aws_logs(stream_prefix=f"Worker",
+                               secrets=self.secrets, logging=ecs.LogDrivers.aws_logs(stream_prefix=family,
                                                                                      log_retention=RetentionDays.ONE_DAY))
         task_def.default_container.add_port_mappings(ecs.PortMapping(container_port=8080, host_port=8080,
-                                                                     protocol=Protocol.TCP))
-        task_def.default_container.add_port_mappings(ecs.PortMapping(container_port=22, host_port=22,
                                                                      protocol=Protocol.TCP))
         # we want only 1 instance of the web server so when new versions are deployed max_healthy_percent=100
         # you have to manually stop the current version and then it should start a new version - done by deploy task
@@ -126,44 +124,33 @@ class AirflowStack(core.Stack):
 
     def worker_service(self, environment):
         family = get_worker_taskdef_family_name(self.deploy_env)
-        service_name =get_worker_service_name(self.deploy_env)
-        worker_task_def = ecs.TaskDefinition(self, family, cpu="512", memory_mib="1024",
-                                             compatibility=ecs.Compatibility.FARGATE, family=family,
-                                             network_mode=ecs.NetworkMode.AWS_VPC)
-        worker_task_def.add_container(f"WorkerCont-{self.deploy_env}",
-                                      image=self.image,
-                                      command=["worker"], environment=environment,
-                                      secrets=self.secrets,
-                                      logging=ecs.LogDrivers.aws_logs(stream_prefix=f"Worker",
-                                                                      log_retention=RetentionDays.ONE_DAY))
-        worker_task_def.default_container.add_port_mappings(ecs.PortMapping(container_port=22,
-                                                                                              host_port=22,
-                                                                                              protocol=Protocol.TCP))
-        # we want only 1 instance of the worker so when new versions are deployed max_healthy_percent=100
-        # you have to manually stop the current version and then it should start a new version - done by deploy task
-        return ecs.FargateService(self, f"AirflowWorker-{self.deploy_env}", service_name=service_name,
-                                  task_definition=worker_task_def,
-                                  cluster=self.cluster, desired_count=self.config["num_airflow_workers"],
-                                  platform_version=ecs.FargatePlatformVersion.VERSION1_4, max_healthy_percent=100)
+        service_name = get_worker_service_name(self.deploy_env)
+        return self.create_service(service_name, family, f"WorkerCont-{self.deploy_env}", environment, "worker",
+                                   desired_count=self.config["num_airflow_workers"], cpu=self.config["cpu"],
+                                   memory=self.config["memory"], max_healthy_percent=200)
 
     def create_scheduler_ecs_service(self, environment) -> ecs.FargateService:
-        task_family =get_scheduler_taskdef_family_name(self.deploy_env)
+        task_family = get_scheduler_taskdef_family_name(self.deploy_env)
         service_name = get_scheduler_service_name(self.deploy_env)
-        scheduler_task_def = ecs.TaskDefinition(self, f"SchedulerTaskDef-{self.deploy_env}", cpu="512",
-                                                memory_mib="1024", family=task_family,
-                                                compatibility=ecs.Compatibility.FARGATE,
-                                                network_mode=ecs.NetworkMode.AWS_VPC)
-        scheduler_task_def.add_container(f"SchedulerCont-{self.deploy_env}",
-                                         image=self.image,
-                                         command=["scheduler"], environment=environment,
-                                         secrets=self.secrets,
-                                         logging=ecs.LogDrivers.aws_logs(stream_prefix=f"Scheduler",
-                                                                         log_retention=RetentionDays.ONE_DAY))
-        scheduler_task_def.default_container.add_port_mappings(ecs.PortMapping(container_port=22,
-                                                                                              host_port=22,
-                                                                                              protocol=Protocol.TCP))
         # we want only 1 instance of the scheduler so when new versions are deployed max_healthy_percent=100
         # you have to manually stop the current version and then it should start a new version - done by deploy task
-        return ecs.FargateService(self, service_name, service_name=service_name, task_definition=scheduler_task_def,
-                           cluster=self.cluster, desired_count=1, platform_version=ecs.FargatePlatformVersion.VERSION1_4,
-                                  max_healthy_percent=100)
+        return self.create_service(service_name, task_family, f"SchedulerCont-{self.deploy_env}", environment, "scheduler",
+                                   desired_count=1, cpu=self.config["cpu"], memory=self.config["memory"],
+                                   max_healthy_percent=100)
+
+    def create_service(self, service_name, family, container_name, environment, command, desired_count=1, cpu="512", memory="1024",
+                       max_healthy_percent=200):
+        worker_task_def = ecs.TaskDefinition(self, family, cpu=cpu, memory_mib=memory,
+                                             compatibility=ecs.Compatibility.FARGATE, family=family,
+                                             network_mode=ecs.NetworkMode.AWS_VPC)
+        worker_task_def.add_container(container_name,
+                                      image=self.image,
+                                      command=[command], environment=environment,
+                                      secrets=self.secrets,
+                                      logging=ecs.LogDrivers.aws_logs(stream_prefix=family,
+                                                                      log_retention=RetentionDays.ONE_DAY))
+        return ecs.FargateService(self, service_name, service_name=service_name,
+                                  task_definition=worker_task_def,
+                                  cluster=self.cluster, desired_count=desired_count,
+                                  platform_version=ecs.FargatePlatformVersion.VERSION1_4, max_healthy_percent=max_healthy_percent)
+
