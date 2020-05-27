@@ -9,6 +9,7 @@
   "cache_node_type": "cache.t2.micro",
   "cache_az_mode": "single-az",
   "dbadmin" : "airflow",
+  "dbadmin_pwd_secret": "postgres_pwd",
   "cpu": "512",
   "memory":  "1024",
   "num_airflow_workers": 1,
