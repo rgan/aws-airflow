@@ -15,7 +15,7 @@ class RdsElasticacheEfsStack(core.Stack):
         super().__init__(scope, id, **kwargs)
         self.config = config
         self.db_sg = SecurityGroup(self, f"AirflowPostgresSG-{deploy_env}", vpc=vpc)
-        db_pwd_secret = SecretValue.ssm_secure("dbadmin_pwd_secret", "1")
+        db_pwd_secret = SecretValue.ssm_secure(self.config["dbadmin_pwd_secret"], "1")
         self.postgres_db = DatabaseInstance(self, f"AirflowPostgresDb-{deploy_env}", engine=DatabaseInstanceEngine.POSTGRES,
                                        multi_az=self.config["mutli_az_db"],
                                        enable_performance_insights=self.config["db_enable_performance_insights"],
