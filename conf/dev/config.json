@@ -18,8 +18,6 @@
   "route53_zone_id": "",
   "lb_vpn_addresses": "1.2.3.4/32",
   "celery_broker_visibility_timeout": 3600,
-  "eks_cluster_name": "eks",
-  "eks_nodegroup_capacity": 2,
-  "eks_nodegroup_instance_type": "t2",
-  "eks_nodegroup_size": "SMALL"
+  "eks_cluster_name": "eks_dev",
+  "eks_nodegroup_capacity": 2
 }

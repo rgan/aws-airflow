@@ -11,6 +11,7 @@ from constructs import Construct
 import aws_cdk.aws_route53 as route53
 import aws_cdk.aws_route53_targets as targets
 import aws_cdk.aws_iam as aws_iam
+import aws_cdk.aws_eks as aws_eks
 
 from airflow_stack.rds_elasticache_stack import RdsElasticacheEfsStack
 
@@ -77,7 +78,7 @@ class AirflowStack(Stack):
         # scheduler
         self.scheduler_service = self.create_scheduler_ecs_service(environment)
         # worker
-        self.worker_service = self.worker_service(environment)
+        self.worker_service = self.create_worker_service(environment)
         self.scheduler_sg().connections.allow_to_default_port(db_redis_stack.postgres_db, 'allow PG')
         self.scheduler_sg().connections.allow_to(redis_sg, redis_port_info, 'allow Redis')
         self.scheduler_sg().connections.allow_to_default_port(db_redis_stack.efs_file_system)
@@ -91,6 +92,7 @@ class AirflowStack(Stack):
         # the port on which the logs are served. It needs to be unused, and open
         # visible from the main web server to connect into the workers.
         self.web_service_sg().connections.allow_to(self.worker_sg(), worker_port_info, 'web service to worker')
+        self.setup_eks_cluster()
 
     def web_service_sg(self):
         return self.web_service.service.connections.security_groups[0]
@@ -144,17 +146,20 @@ class AirflowStack(Stack):
                         target=route53.RecordTarget.from_alias(targets.LoadBalancerTarget(service.load_balancer)))
         return service
 
-    def worker_service(self, environment):
+    def create_worker_service(self, environment):
         family = get_worker_taskdef_family_name(self.deploy_env)
         service_name = get_worker_service_name(self.deploy_env)
         service = self.create_service(service_name, family, f"WorkerCont-{self.deploy_env}", environment, "worker",
                                    desired_count=self.config["num_airflow_workers"], cpu=self.config["cpu"],
                                    memory=self.config["memory"], max_healthy_percent=200)
-        service.task_definition.add_to_task_role_policy(PolicyStatement(
+        service.task_definition.add_to_task_role_policy(self.athena_access_policy())
+        return service
+
+    def athena_access_policy(self):
+        return PolicyStatement(
             resources=["*"],
             actions=["athena:*"]
-        ))
-        return service
+        )
 
     def create_scheduler_ecs_service(self, environment) -> ecs.FargateService:
         task_family = get_scheduler_taskdef_family_name(self.deploy_env)
@@ -204,3 +209,22 @@ class AirflowStack(Stack):
             aws_iam.ManagedPolicy.from_aws_managed_policy_name("AWSXRayDaemonWriteAccess")
         ]:
             worker_task_def.execution_role.add_managed_policy(managed_policy)
+
+    def setup_eks_cluster(self):
+        self.cluster = aws_eks.Cluster(
+            self,
+            self.config["eks_cluster_name"],
+            version=aws_eks.KubernetesVersion.V1_21,
+            default_capacity=self.config.get("eks_nodegroup_capacity", 2),
+            default_capacity_instance=ec2.InstanceType.of(
+                instance_class=ec2.InstanceClass.BURSTABLE2,
+                instance_size=ec2.InstanceSize.SMALL
+            ),
+            vpc=self.vpc,
+            vpc_subnets=self.vpc.private_subnets,
+            endpoint_access=aws_eks.EndpointAccess.PUBLIC
+        )
+        # add worker task roles to masters group in the EKS cluster so that workers can launch pods
+        self.cluster.aws_auth.add_role_mapping(self.worker_service.task_definition.task_role, groups=["system:masters"])
+        # add any needed policies to give permissions to EKS nodes
+        self.cluster.default_nodegroup.role.add_to_policy(self.athena_access_policy())
