@@ -1,10 +1,11 @@
-from aws_cdk import core
+from aws_cdk import Stack
 from aws_cdk.aws_ec2 import Vpc
+from constructs import Construct
 
 
-class VpcStack(core.Stack):
+class VpcStack(Stack):
 
-    def __init__(self, scope: core.Construct, id: str, deploy_env: str, config: dict, **kwargs) -> None:
+    def __init__(self, scope: Construct, id: str, deploy_env: str, config: dict, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
         self.config = config
         self.deploy_env = deploy_env

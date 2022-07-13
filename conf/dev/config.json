@@ -1,5 +1,5 @@
 {
-  "account_id" : "",
+  "account_id" : "958237526296",
   "max_vpc_azs" : 2,
   "ecr_repo_name" : "test-repo",
   "db_instance_type" : "t2.micro",
@@ -9,9 +9,17 @@
   "cache_node_type": "cache.t2.micro",
   "cache_az_mode": "single-az",
   "dbadmin" : "airflow",
-  "dbadmin_pwd_secret": "postgres_pwd",
+  "db_secret": "postgres_pwd",
   "cpu": "512",
   "memory":  "1024",
   "num_airflow_workers": 1,
-  "celery_broker_visibility_timeout": 3600
+  "lb_certificate_arn": "",
+  "lb_dns_name": "airflow.dev",
+  "route53_zone_id": "",
+  "lb_vpn_addresses": "1.2.3.4/32",
+  "celery_broker_visibility_timeout": 3600,
+  "eks_cluster_name": "eks",
+  "eks_nodegroup_capacity": 2,
+  "eks_nodegroup_instance_type": "t2",
+  "eks_nodegroup_size": "SMALL"
 }

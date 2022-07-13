@@ -1,30 +1,32 @@
-from aws_cdk import core, aws_ec2, aws_efs
+from aws_cdk import aws_ec2, aws_efs, Stack
 from aws_cdk.aws_ec2 import SecurityGroup, InstanceType, InstanceClass, InstanceSize, AmazonLinuxGeneration, \
     AmazonLinuxEdition, AmazonLinuxStorage, SubnetType, SubnetSelection, MachineImage, Port, Protocol
 from aws_cdk.aws_efs import PerformanceMode, ThroughputMode
-from aws_cdk.aws_rds import DatabaseInstance, DatabaseInstanceEngine
+from aws_cdk.aws_rds import DatabaseInstance, DatabaseInstanceEngine, Credentials
 import aws_cdk.aws_elasticache as elasticache
-from aws_cdk.core import SecretValue
+from aws_cdk import SecretValue
+from constructs import Construct
 
 REDIS_PORT = 6379
 MOUNT_POINT = "/mnt/efs"
 
-class RdsElasticacheEfsStack(core.Stack):
+class RdsElasticacheEfsStack(Stack):
 
-    def __init__(self, scope: core.Construct, id: str, deploy_env: str, vpc: aws_ec2.Vpc, config: dict, **kwargs) -> None:
+    def __init__(self, scope: Construct, id: str, deploy_env: str, vpc: aws_ec2.Vpc, config: dict, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
         self.config = config
         self.db_sg = SecurityGroup(self, f"AirflowPostgresSG-{deploy_env}", vpc=vpc)
-        db_pwd_secret = SecretValue.ssm_secure(self.config["dbadmin_pwd_secret"], "1")
-        self.postgres_db = DatabaseInstance(self, f"AirflowPostgresDb-{deploy_env}", engine=DatabaseInstanceEngine.POSTGRES,
-                                       multi_az=self.config["mutli_az_db"],
-                                       enable_performance_insights=self.config["db_enable_performance_insights"],
-                                       allocated_storage=10,
-                                       instance_class=InstanceType(config["db_instance_type"]),
-                                       master_username=self.config["dbadmin"],
-                                       master_user_password=db_pwd_secret,
-                                       vpc=vpc,  # default placement is private subnets
-                                       security_groups=[self.db_security_group])
+        self.postgres_db = DatabaseInstance(self, f"AirflowPostgresDb-{deploy_env}",
+                                            engine=DatabaseInstanceEngine.POSTGRES,
+                                            instance_type=InstanceType.of(InstanceClass.BURSTABLE3, InstanceSize.MEDIUM),
+                                            credentials=Credentials.from_generated_secret("postgres",
+                                                                  secret_name="db_secret",
+                                                                  exclude_characters="!&*^#@()"),
+                                            multi_az=self.config["mutli_az_db"],
+                                            enable_performance_insights=self.config["db_enable_performance_insights"],
+                                            allocated_storage=10,
+                                            vpc=vpc,  # default placement is private subnets
+                                            security_groups=[self.db_security_group])
         self.redis_sg = SecurityGroup(self, f"AirflowRedisSG-{deploy_env}", vpc=vpc)
         redis_subnet_group_name = f"AirflowRedisSubnetGrp-{deploy_env}"
         redis_subnet_group = elasticache.CfnSubnetGroup(self, redis_subnet_group_name,
