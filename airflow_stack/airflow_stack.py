@@ -5,11 +5,12 @@ import aws_cdk.aws_ecs as ecs
 import aws_cdk.aws_ecs_patterns as ecs_patterns
 from aws_cdk.aws_ecr_assets import DockerImageAsset
 from aws_cdk.aws_iam import PolicyStatement
-from aws_cdk.aws_logs import RetentionDays
+from aws_cdk.aws_logs import RetentionDays, LogGroup
 from aws_cdk.aws_ssm import StringParameter
 from constructs import Construct
 import aws_cdk.aws_route53 as route53
 import aws_cdk.aws_route53_targets as targets
+import aws_cdk.aws_iam as aws_iam
 
 from airflow_stack.rds_elasticache_stack import RdsElasticacheEfsStack
 
@@ -162,10 +163,10 @@ class AirflowStack(Stack):
         # you have to manually stop the current version and then it should start a new version - done by deploy task
         return self.create_service(service_name, task_family, f"SchedulerCont-{self.deploy_env}", environment, "scheduler",
                                    desired_count=1, cpu=self.config["cpu"], memory=self.config["memory"],
-                                   max_healthy_percent=100)
+                                   max_healthy_percent=100, add_cw_agent=True)
 
     def create_service(self, service_name, family, container_name, environment, command, desired_count=1, cpu="512", memory="1024",
-                       max_healthy_percent=200):
+                       max_healthy_percent=200, add_cw_agent=False):
         worker_task_def = ecs.TaskDefinition(self, family, cpu=cpu, memory_mib=memory,
                                              compatibility=ecs.Compatibility.FARGATE, family=family,
                                              network_mode=ecs.NetworkMode.AWS_VPC)
@@ -175,10 +176,31 @@ class AirflowStack(Stack):
                                       secrets=self.secrets,
                                       logging=ecs.LogDrivers.aws_logs(stream_prefix=family,
                                                                       log_retention=RetentionDays.ONE_DAY))
-
+        if add_cw_agent:
+            self.add_cw_statsd_container(container_name, worker_task_def)
         return ecs.FargateService(self, service_name, service_name=service_name,
                                   task_definition=worker_task_def,
                                   cluster=self.cluster, desired_count=desired_count,
                                   platform_version=ecs.FargatePlatformVersion.VERSION1_4, max_healthy_percent=max_healthy_percent)
 
-
+    def add_cw_statsd_container(self, container_name, worker_task_def):
+        namespace = f"airflow/{self.deploy_env}/cwagent"
+        worker_task_def.add_container(f"cw_agent_{container_name}",
+                                      image=ecs.ContainerImage.from_registry(
+                                          "public.ecr.aws/cloudwatch-agent/cloudwatch-agent:latest"),
+                                      environment={
+                                          "CW_CONFIG_CONTENT": '{"metrics": {"namespace":"' + namespace
+                                                               + '","metrics_collected":{"statsd":{}}}}'
+                                      },
+                                      logging=ecs.LogDrivers.aws_logs(
+                                          log_group=LogGroup(
+                                              self,
+                                              "ecs/airflow",
+                                              retention=RetentionDays.ONE_DAY),
+                                          stream_prefix=container_name)
+                                      )
+        for managed_policy in [
+            aws_iam.ManagedPolicy.from_aws_managed_policy_name("CloudWatchAgentServerPolicy"),
+            aws_iam.ManagedPolicy.from_aws_managed_policy_name("AWSXRayDaemonWriteAccess")
+        ]:
+            worker_task_def.execution_role.add_managed_policy(managed_policy)
